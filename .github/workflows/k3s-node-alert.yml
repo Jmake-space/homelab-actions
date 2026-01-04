@@ -4,6 +4,11 @@ on:
   repository_dispatch:
     types: [k3s-node-alert]
   workflow_dispatch:
+    inputs:
+      payload_json:
+        description: "Optional JSON payload for test runs"
+        required: false
+        default: ""
 
 jobs:
   notify:
@@ -18,6 +23,7 @@ jobs:
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
           PAYLOAD: ${{ toJson(github.event.client_payload) }}
+          PAYLOAD_INPUT: ${{ github.event.inputs.payload_json }}
         run: |
           python3 - <<'PY'
           import json
@@ -27,9 +33,8 @@ jobs:
 
           payload = os.environ.get("PAYLOAD")
           if not payload or payload == "null":
-              data = {}
-          else:
-              data = json.loads(payload)
+              payload = os.environ.get("PAYLOAD_INPUT") or "{}"
+          data = json.loads(payload)
 
           subject = f"K3s {data.get('cluster','')} {data.get('event','test')} ({data.get('status','')})"
           body = "\n".join(
