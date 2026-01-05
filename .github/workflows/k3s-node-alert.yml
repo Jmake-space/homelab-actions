@@ -12,7 +12,7 @@ on:
 
 jobs:
   notify:
-    runs-on: [self-hosted, pi5]
+    runs-on: [self-hosted, pi5, docker]
     steps:
       - name: Send email
         env:
