@@ -85,8 +85,6 @@ jobs:
     needs: notify
     if: ${{ github.event.client_payload.target_agent == 'k3s-support-agent' }}
     steps:
-      - uses: actions/checkout@v4
-
       - name: Ensure git is available
         run: |
           if command -v git >/dev/null 2>&1; then
@@ -94,6 +92,8 @@ jobs:
           fi
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends git
+
+      - uses: actions/checkout@v4
 
       - name: Write support incident file
         env:
