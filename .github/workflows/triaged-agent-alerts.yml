@@ -153,7 +153,7 @@ jobs:
       - name: Commit support incident log
         run: |
           set -euo pipefail
-          if git diff --quiet; then
+          if [ -z "$(git status --porcelain incidents/k3s-support-agent)" ]; then
             echo "No incident file changes"
             exit 0
           fi
