@@ -1,0 +1,156 @@
+name: triaged-agent-alerts
+
+on:
+  repository_dispatch:
+    types:
+      - triaged-agent-alert
+  workflow_dispatch:
+    inputs:
+      payload_json:
+        description: "Optional JSON payload for test runs"
+        required: false
+        default: "{}"
+
+permissions:
+  contents: write
+
+jobs:
+  notify:
+    runs-on: [self-hosted]
+    steps:
+      - name: Build and send triaged alert email
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          PAYLOAD: ${{ toJson(github.event.client_payload) }}
+          PAYLOAD_INPUT: ${{ github.event.inputs.payload_json }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import smtplib
+          from email.message import EmailMessage
+
+          payload = os.environ.get("PAYLOAD")
+          if not payload or payload == "null":
+              payload = os.environ.get("PAYLOAD_INPUT") or "{}"
+          data = json.loads(payload)
+
+          cluster = data.get("cluster", "")
+          event = data.get("event", "")
+          status = data.get("status", "")
+          resource_type = data.get("resource_type", "")
+          target_agent = data.get("target_agent", "")
+          route_reason = data.get("route_reason", "")
+          summary = data.get("summary", "")
+          timestamp = data.get("timestamp", "")
+          routing = data.get("routing", {})
+
+          subject = f"[TRIAGED] {target_agent} {cluster} {status}".strip()
+          body = "\n".join([
+              "Event Type: triaged-agent-alert",
+              f"Cluster: {cluster}",
+              f"Event: {event}",
+              f"Status: {status}",
+              f"Resource Type: {resource_type}",
+              f"Target Agent: {target_agent}",
+              f"Route Reason: {route_reason}",
+              f"Summary: {summary}",
+              f"Time: {timestamp}",
+              "",
+              "Routing:",
+              json.dumps(routing, indent=2, sort_keys=True),
+              "",
+              "Payload:",
+              json.dumps(data, indent=2, sort_keys=True),
+          ])
+
+          msg = EmailMessage()
+          msg["Subject"] = subject
+          msg["From"] = os.environ["MAIL_FROM"]
+          msg["To"] = os.environ["MAIL_TO"]
+          msg.set_content(body)
+
+          with smtplib.SMTP_SSL(os.environ["SMTP_HOST"], int(os.environ["SMTP_PORT"])) as smtp:
+              smtp.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+              smtp.send_message(msg)
+          PY
+
+  support-incident-log:
+    runs-on: [self-hosted]
+    needs: notify
+    if: ${{ github.event.client_payload.target_agent == 'k3s-support-agent' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write support incident file
+        env:
+          PAYLOAD: ${{ toJson(github.event.client_payload) }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          payload = json.loads(os.environ.get("PAYLOAD") or "{}")
+          ts = datetime.now(timezone.utc)
+          stamp = ts.strftime("%Y%m%d-%H%M%S")
+          y = ts.strftime("%Y")
+          m = ts.strftime("%m")
+
+          routing = payload.get("routing", {})
+          runbook_ref = routing.get("runbook_ref", "")
+          mitigation_plan = routing.get("mitigation_plan", "")
+
+          out_dir = Path("incidents") / "k3s-support-agent" / y / m
+          out_dir.mkdir(parents=True, exist_ok=True)
+          out_file = out_dir / f"incident-{stamp}-run-{os.environ.get('RUN_ID','')}.md"
+
+          lines = [
+              f"# k3s-support-agent Incident {stamp}",
+              "",
+              f"- cluster: {payload.get('cluster','')}",
+              f"- event: {payload.get('event','')}",
+              f"- status: {payload.get('status','')}",
+              f"- resource_type: {payload.get('resource_type','')}",
+              f"- target_agent: {payload.get('target_agent','')}",
+              f"- routed_service: {routing.get('service','')}",
+              f"- route_reason: {payload.get('route_reason','')}",
+              f"- timestamp: {payload.get('timestamp','')}",
+              "",
+              "## Summary",
+              payload.get("summary", ""),
+              "",
+              "## Runbook Reference",
+              runbook_ref or "(not provided)",
+              "",
+              "## Mitigation Plan",
+              mitigation_plan or "(not provided)",
+              "",
+              "## Raw Payload",
+              "```json",
+              json.dumps(payload, indent=2, sort_keys=True),
+              "```",
+          ]
+          out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print(f"wrote {out_file}")
+          PY
+
+      - name: Commit support incident log
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No incident file changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add incidents/k3s-support-agent
+          git commit -m "chore(incidents): log k3s-support triaged incident"
+          git push

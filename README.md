@@ -4,14 +4,15 @@ GitHub Actions workflows and self-hosted runner for the homelab.
 
 ## Flow
 ```
-k3s-node-alert (CronJob or systemd)
+k3s-alert (watcher dispatch ingress)
   -> repository_dispatch (GitHub App token)
-  -> k3s-node-alert.yml
+  -> k3s-alert.yml
   -> SMTP email
 ```
 
 ## Workflows
-- `k3s-node-alert.yml`: sends email alerts when a webhook dispatch is received.
+- `k3s-alert.yml`: ingress alert receiver; forwards payload to `k3s-cluster` triage router.
+- `triaged-agent-alerts.yml`: receives normalized triaged alerts, sends notifications, and logs support incidents.
 
 ## Runner
 - Labels: `self-hosted`, `pi5`, `docker`

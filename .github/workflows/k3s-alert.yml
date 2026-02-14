@@ -1,14 +1,14 @@
-name: k3s-node-alert
+name: k3s-alert
 
 on:
   repository_dispatch:
-    types: [k3s-node-alert]
+    types: [k3s-alert]
   workflow_dispatch:
     inputs:
       payload_json:
         description: "Optional JSON payload for test runs"
         required: false
-        default: ""
+        default: "{}"
 
 permissions:
   contents: read
@@ -17,7 +17,7 @@ jobs:
   notify:
     runs-on: [self-hosted]
     steps:
-      - name: Send email
+      - name: Send ingress alert email
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -40,41 +40,23 @@ jobs:
           data = json.loads(payload)
 
           cluster = data.get("cluster", "")
-          event = data.get("event", "test")
+          event = data.get("event", "")
           status = data.get("status", "")
-          nodes_down = data.get("nodes_down", "")
-          nodes_down_current = data.get("nodes_down_current", "")
-          nodes_recovered = data.get("nodes_recovered", "")
+          summary = data.get("summary", "")
           timestamp = data.get("timestamp", "")
-          nodes_table = data.get("nodes_table", "")
 
-          if event in ("resolved", "recovery") or status == "node-recovered":
-              alert_label = "RECOVERY"
-              summary = f"Recovered nodes: {nodes_recovered or 'none'}"
-          elif event == "incident" or status == "node-down":
-              alert_label = "INCIDENT"
-              summary = f"Newly down nodes: {nodes_down or 'none'}"
-          else:
-              alert_label = "CHANGE"
-              summary = "Node state change detected"
-
-          subject = f"[{alert_label}] k3s {cluster} - {status}"
-          body = "\n".join(
-              [
-                  f"Cluster: {cluster}",
-                  f"Alert Type: {alert_label}",
-                  f"Event: {event}",
-                  f"Status: {status}",
-                  f"Summary: {summary}",
-                  f"Down (new): {nodes_down}",
-                  f"Down (current): {nodes_down_current}",
-                  f"Recovered: {nodes_recovered}",
-                  f"Time: {timestamp}",
-                  "",
-                  "Nodes:",
-                  nodes_table,
-              ]
-          )
+          subject = f"[INGRESS] k3s-alert {cluster} {status}".strip()
+          body = "\n".join([
+              "Event Type: k3s-alert",
+              f"Cluster: {cluster}",
+              f"Event: {event}",
+              f"Status: {status}",
+              f"Summary: {summary}",
+              f"Time: {timestamp}",
+              "",
+              "Payload:",
+              json.dumps(data, indent=2, sort_keys=True),
+          ])
 
           msg = EmailMessage()
           msg["Subject"] = subject
@@ -82,28 +64,23 @@ jobs:
           msg["To"] = os.environ["MAIL_TO"]
           msg.set_content(body)
 
-          host = os.environ["SMTP_HOST"]
-          port = int(os.environ["SMTP_PORT"])
-          user = os.environ["SMTP_USER"]
-          password = os.environ["SMTP_PASS"]
-
-          with smtplib.SMTP_SSL(host, port) as smtp:
-              smtp.login(user, password)
+          with smtplib.SMTP_SSL(os.environ["SMTP_HOST"], int(os.environ["SMTP_PORT"])) as smtp:
+              smtp.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
               smtp.send_message(msg)
           PY
 
-  notify-k3s-ops-agent:
+  forward-triage-router:
     runs-on: [self-hosted]
     needs: notify
     if: ${{ always() }}
     steps:
-      - name: Forward event to k3s-ops-agent dispatch
+      - name: Forward to triage-router-workflow
         env:
           PAYLOAD: ${{ toJson(github.event.client_payload) }}
           PAYLOAD_INPUT: ${{ github.event.inputs.payload_json }}
-          OPS_DISPATCH_URL: ${{ vars.K3S_OPS_DISPATCH_URL || 'https://api.github.com/repos/Jmake-space/k3s-cluster/dispatches' }}
-          OPS_EVENT_TYPE: ${{ vars.K3S_OPS_EVENT_TYPE || 'k3s-ops-agent-alert' }}
-          OPS_DISPATCH_TOKEN: ${{ secrets.K3S_OPS_REPO_DISPATCH_TOKEN }}
+          TRIAGE_DISPATCH_URL: ${{ vars.TRIAGE_DISPATCH_URL || 'https://api.github.com/repos/Jmake-space/k3s-cluster/dispatches' }}
+          TRIAGE_EVENT_TYPE: ${{ vars.TRIAGE_EVENT_TYPE || 'triage-router-workflow' }}
+          TRIAGE_DISPATCH_TOKEN: ${{ secrets.K3S_OPS_REPO_DISPATCH_TOKEN }}
           SOURCE_REPO: ${{ github.repository }}
           SOURCE_WORKFLOW: ${{ github.workflow }}
           SOURCE_RUN_ID: ${{ github.run_id }}
@@ -114,15 +91,15 @@ jobs:
           import sys
           import urllib.request
 
-          token = (os.environ.get("OPS_DISPATCH_TOKEN") or "").strip()
-          dispatch_url = (os.environ.get("OPS_DISPATCH_URL") or "").strip()
-          dispatch_event_type = (os.environ.get("OPS_EVENT_TYPE") or "k3s-ops-agent-alert").strip()
+          token = (os.environ.get("TRIAGE_DISPATCH_TOKEN") or "").strip()
+          dispatch_url = (os.environ.get("TRIAGE_DISPATCH_URL") or "").strip()
+          dispatch_event_type = (os.environ.get("TRIAGE_EVENT_TYPE") or "triage-router-workflow").strip()
           payload_raw = os.environ.get("PAYLOAD")
           if not payload_raw or payload_raw == "null":
               payload_raw = os.environ.get("PAYLOAD_INPUT") or "{}"
 
           if not token or not dispatch_url:
-              print("k3s-ops forward skipped: missing token or dispatch URL")
+              print("triage forward skipped: missing token or dispatch URL")
               sys.exit(0)
 
           payload = json.loads(payload_raw)
@@ -131,10 +108,8 @@ jobs:
               "workflow": os.environ.get("SOURCE_WORKFLOW", ""),
               "run_id": os.environ.get("SOURCE_RUN_ID", ""),
           }
-          body = {
-              "event_type": dispatch_event_type,
-              "client_payload": payload,
-          }
+
+          body = {"event_type": dispatch_event_type, "client_payload": payload}
 
           request = urllib.request.Request(
               dispatch_url,
@@ -147,5 +122,5 @@ jobs:
               method="POST",
           )
           with urllib.request.urlopen(request, timeout=15) as response:
-              print(f"k3s-ops dispatch forwarded: status={response.status}")
+              print(f"triage-router dispatch forwarded: status={response.status}")
           PY
