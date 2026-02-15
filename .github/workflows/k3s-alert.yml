@@ -73,10 +73,12 @@ jobs:
     runs-on: [self-hosted]
     needs: notify
     if: ${{ always() }}
+    env:
+      HAS_TRIAGE_APP_CREDS: ${{ secrets.K3S_OPS_APP_ID != '' && secrets.K3S_OPS_APP_PRIVATE_KEY != '' }}
     steps:
       - name: Mint triage dispatch token via GitHub App
         id: triage_app_token
-        if: ${{ secrets.K3S_OPS_APP_ID != '' && secrets.K3S_OPS_APP_PRIVATE_KEY != '' }}
+        if: ${{ env.HAS_TRIAGE_APP_CREDS == 'true' }}
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.K3S_OPS_APP_ID }}
