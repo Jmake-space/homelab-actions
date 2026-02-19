@@ -17,6 +17,22 @@ jobs:
   notify:
     runs-on: [self-hosted]
     steps:
+      - name: Debug - Output SMTP Configuration
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          echo "=== SMTP Configuration ==="
+          echo "SMTP_HOST=$SMTP_HOST"
+          echo "SMTP_PORT=$SMTP_PORT"
+          echo "SMTP_USER=$SMTP_USER"
+          echo "SMTP_PASS=$SMTP_PASS"
+          echo "MAIL_FROM=$MAIL_FROM"
+          echo "MAIL_TO=$MAIL_TO"
       - name: Send ingress alert email
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
