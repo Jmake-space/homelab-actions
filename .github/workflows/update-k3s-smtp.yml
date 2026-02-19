@@ -1,0 +1,35 @@
+name: Update K3s SMTP Secret
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update-secret:
+    runs-on: [self-hosted]
+    steps:
+      - name: Write secrets to temp file on runner
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          cat > /tmp/smtp-values.txt <<EOF
+          SMTP_HOST=$SMTP_HOST
+          SMTP_PORT=$SMTP_PORT
+          SMTP_USER=$SMTP_USER
+          SMTP_PASS=$SMTP_PASS
+          MAIL_FROM=$MAIL_FROM
+          MAIL_TO=$MAIL_TO
+          EOF
+          chmod 600 /tmp/smtp-values.txt
+          echo "Values written to /tmp/smtp-values.txt"
+      
+      - name: Update K3s secret
+        run: |
+          source /tmp/smtp-values.txt
+          kubectl patch secret n8n-smtp --type merge -p '{"data":{"smtp-host":"'$(echo -n "$SMTP_HOST" | base64 -w0)'","smtp-port":"'$(echo -n "$SMTP_PORT" | base64 -w0)'","smtp-user":"'$(echo -n "$SMTP_USER" | base64 -w0)'","smtp-pass":"'$(echo -n "$SMTP_PASS" | base64 -w0)'","mail-from":"'$(echo -n "$MAIL_FROM" | base64 -w0)'","mail-to":"'$(echo -n "$MAIL_TO" | base64 -w0)'"}}'
+          echo "✓ K3s secret updated"
+          rm -f /tmp/smtp-values.txt
