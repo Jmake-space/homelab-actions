@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1400" viewBox="0 0 1900 1400">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#1f2937" />
+    </marker>
+    <marker id="arrowDisabled" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#9ca3af" />
+    </marker>
+    <style>
+      .title { font: 700 34px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 17px Arial, sans-serif; fill: #334155; }
+      .laneTitle { font: 700 19px Arial, sans-serif; fill: #0f172a; }
+      .boxTitle { font: 700 17px Arial, sans-serif; fill: #0f172a; }
+      .body { font: 500 14px Arial, sans-serif; fill: #0f172a; }
+      .small { font: 500 13px Arial, sans-serif; fill: #334155; }
+
+      .laneActive { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; rx: 16; ry: 16; }
+      .laneDeprecated { fill: #f9fafb; stroke: #9ca3af; stroke-width: 2; stroke-dasharray: 9 6; rx: 16; ry: 16; }
+
+      .boxWatcher { fill: #dcfce7; stroke: #14532d; stroke-width: 2; rx: 12; ry: 12; }
+      .boxActions { fill: #dbeafe; stroke: #1e3a8a; stroke-width: 2; rx: 12; ry: 12; }
+      .boxTriage { fill: #ede9fe; stroke: #5b21b6; stroke-width: 2; rx: 12; ry: 12; }
+      .boxIncident { fill: #fee2e2; stroke: #7f1d1d; stroke-width: 2; rx: 12; ry: 12; }
+      .boxAgent { fill: #fde68a; stroke: #854d0e; stroke-width: 2; rx: 12; ry: 12; }
+      .boxDeprecated { fill: #f3f4f6; stroke: #9ca3af; stroke-width: 2; stroke-dasharray: 7 6; rx: 12; ry: 12; }
+
+      .line { stroke: #1f2937; stroke-width: 2.3; fill: none; marker-end: url(#arrow); }
+      .lineDisabled { stroke: #9ca3af; stroke-width: 2.1; stroke-dasharray: 8 6; fill: none; marker-end: url(#arrowDisabled); }
+    </style>
+  </defs>
+
+  <text x="40" y="52" class="title">k3s Alert Flow: Watcher → k3s-alert → Triage → Agent + Incident</text>
+  <text x="40" y="82" class="subtitle">Source-of-truth sequence is based on `k3s-alert-flow-steps.md`; deprecated cronjob lane is shown as disabled only.</text>
+
+  <!-- Active lane -->
+  <rect x="30" y="110" width="1840" height="1020" class="laneActive" />
+  <text x="52" y="145" class="laneTitle">Active Production Flow (Step-by-step)</text>
+
+  <!-- Step 1 -->
+  <rect x="70" y="175" width="360" height="150" class="boxWatcher" />
+  <text x="90" y="204" class="boxTitle">1) node-health-watcher monitors cluster</text>
+  <text x="90" y="229" class="body">- Watches node/service transitions</text>
+  <text x="90" y="251" class="body">- Builds structured alert payload</text>
+  <text x="90" y="273" class="body">- Event source of record</text>
+
+  <!-- Step 2 -->
+  <rect x="490" y="175" width="420" height="150" class="boxActions" />
+  <text x="510" y="204" class="boxTitle">2) repository_dispatch to homelab-actions</text>
+  <text x="510" y="229" class="body">- Repo: `Jmake-space/homelab-actions`</text>
+  <text x="510" y="251" class="body">- event_type: `k3s-alert`</text>
+  <text x="510" y="273" class="body">- client_payload includes context fields</text>
+
+  <!-- Step 3+4 -->
+  <rect x="970" y="175" width="430" height="170" class="boxActions" />
+  <text x="990" y="204" class="boxTitle">3-4) k3s-alert workflow starts</text>
+  <text x="990" y="229" class="body">- `notify` sends ingress alert email</text>
+  <text x="990" y="251" class="body">- Includes cluster/event/status/summary</text>
+  <text x="990" y="273" class="body">- Validates and forwards payload path</text>
+  <text x="990" y="295" class="body">- No deprecated dispatch type dependency</text>
+
+  <!-- Step 5+6 -->
+  <rect x="1460" y="175" width="370" height="190" class="boxActions" />
+  <text x="1480" y="204" class="boxTitle">5-6) Forward to triage-router</text>
+  <text x="1480" y="229" class="body">- Mint short-lived GitHub App token</text>
+  <text x="1480" y="251" class="body">- Uses `K3S_OPS_APP_ID` + key secret</text>
+  <text x="1480" y="273" class="body">- Dispatch to `k3s-cluster`</text>
+  <text x="1480" y="295" class="body">- event_type: `triage-router-workflow`</text>
+  <text x="1480" y="317" class="body">- Token revoked after step completes</text>
+
+  <!-- Step 7 -->
+  <rect x="180" y="430" width="510" height="220" class="boxTriage" />
+  <text x="200" y="460" class="boxTitle">7) triage-router-workflow (k3s-cluster)</text>
+  <text x="200" y="486" class="body">- Normalize payload and summarize alert</text>
+  <text x="200" y="508" class="body">- Optional read-only SSH triage (no mutation)</text>
+  <text x="200" y="530" class="body">- Route via `service-agent-map.json`</text>
+  <text x="200" y="552" class="body">- Fallback unresolved cases to `k3s_support`</text>
+  <text x="200" y="574" class="body">- Determine `resource_type` + route reason</text>
+
+  <!-- Step 8 -->
+  <rect x="760" y="450" width="460" height="180" class="boxTriage" />
+  <text x="780" y="480" class="boxTitle">8) Emit triaged-agent-alert dispatch</text>
+  <text x="780" y="506" class="body">- target_agent + route_reason</text>
+  <text x="780" y="528" class="body">- runbook_ref + mitigation_plan</text>
+  <text x="780" y="550" class="body">- resource_type + context details</text>
+  <text x="780" y="572" class="body">- Sent to `Jmake-space/homelab-actions`</text>
+
+  <!-- Step 9 -->
+  <rect x="1290" y="450" width="520" height="180" class="boxActions" />
+  <text x="1310" y="480" class="boxTitle">9) triaged-agent-alerts workflow</text>
+  <text x="1310" y="506" class="body">- Trigger: `triaged-agent-alert`</text>
+  <text x="1310" y="528" class="body">- Sends triaged notification with routing context</text>
+  <text x="1310" y="550" class="body">- Carries incident metadata for handling</text>
+  <text x="1310" y="572" class="body">- Confirms routed target agent in payload</text>
+
+  <!-- Step 10 -->
+  <rect x="220" y="730" width="700" height="190" class="boxIncident" />
+  <text x="240" y="760" class="boxTitle">10) Conditional incident file creation (support path)</text>
+  <text x="240" y="786" class="body">- Condition: `target_agent == k3s-support-agent`</text>
+  <text x="240" y="808" class="body">- Writes markdown under `incidents/k3s-support-agent/YYYY/MM/`</text>
+  <text x="240" y="830" class="body">- Includes raw payload, route reason, runbook, mitigation</text>
+  <text x="240" y="852" class="body">- Commits incident log via workflow git push</text>
+
+  <!-- Step 11 -->
+  <rect x="1010" y="730" width="760" height="190" class="boxAgent" />
+  <text x="1030" y="760" class="boxTitle">11) Agent triage asks remediation and executes runbook path</text>
+  <text x="1030" y="786" class="body">- Target service/support agent receives triaged context</text>
+  <text x="1030" y="808" class="body">- Proposes remediation actions from runbook + mitigation plan</text>
+  <text x="1030" y="830" class="body">- Disruptive or high-risk actions require explicit approval</text>
+  <text x="1030" y="852" class="body">- Recovery outcomes are logged and fed back into alert cycle</text>
+
+  <!-- Connectors Active -->
+  <path d="M430 250 L490 250" class="line" />
+  <path d="M910 250 L970 250" class="line" />
+  <path d="M1400 265 L1460 265" class="line" />
+
+  <path d="M1650 365 L1650 420 L630 420 L630 430" class="line" />
+  <path d="M690 540 L760 540" class="line" />
+  <path d="M1220 540 L1290 540" class="line" />
+
+  <path d="M1550 630 L1550 700 L570 700 L570 730" class="line" />
+  <path d="M1550 630 L1550 700 L1390 700 L1390 730" class="line" />
+
+  <!-- Deprecated lane -->
+  <rect x="30" y="1160" width="1840" height="210" class="laneDeprecated" />
+  <text x="52" y="1192" class="laneTitle">Deprecated / Disabled Flow (Not Active)</text>
+
+  <rect x="70" y="1215" width="460" height="120" class="boxDeprecated" />
+  <text x="90" y="1244" class="boxTitle">Legacy cronjob source (disabled)</text>
+  <text x="90" y="1268" class="small">`k3s-node-alert` cronjob path is deprecated.</text>
+  <text x="90" y="1290" class="small">Shown only for historical reference.</text>
+
+  <rect x="620" y="1215" width="500" height="120" class="boxDeprecated" />
+  <text x="640" y="1244" class="boxTitle">Legacy dispatch type (disabled)</text>
+  <text x="640" y="1268" class="small">Previously used `event_type: k3s-node-alert`.</text>
+  <text x="640" y="1290" class="small">No active arrow to production workflow path.</text>
+
+  <rect x="1210" y="1215" width="620" height="120" class="boxDeprecated" />
+  <text x="1230" y="1244" class="boxTitle">Status in current design</text>
+  <text x="1230" y="1268" class="small">Deprecated lane is intentionally separated and disabled.</text>
+  <text x="1230" y="1290" class="small">Active source-of-truth is watcher → `k3s-alert` only.</text>
+
+  <path d="M530 1275 L620 1275" class="lineDisabled" />
+  <path d="M1120 1275 L1210 1275" class="lineDisabled" />
+</svg>
