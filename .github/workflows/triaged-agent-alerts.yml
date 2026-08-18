@@ -33,7 +33,20 @@ jobs:
           import json
           import os
           import smtplib
+          from datetime import datetime
           from email.message import EmailMessage
+          from zoneinfo import ZoneInfo
+
+          EASTERN_TZ = ZoneInfo("America/New_York")
+
+          def eastern_timestamp(value):
+              if not value:
+                  return ""
+              try:
+                  parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+              except ValueError:
+                  return value
+              return parsed.astimezone(EASTERN_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
 
           payload = os.environ.get("PAYLOAD")
           if not payload or payload == "null":
@@ -48,6 +61,7 @@ jobs:
           route_reason = data.get("route_reason", "")
           summary = data.get("summary", "")
           timestamp = data.get("timestamp", "")
+          timestamp_eastern = data.get("timestamp_eastern") or eastern_timestamp(timestamp)
           routing = data.get("routing", {})
 
           subject = f"[TRIAGED] {target_agent} {cluster} {status}".strip()
@@ -60,7 +74,8 @@ jobs:
               f"Target Agent: {target_agent}",
               f"Route Reason: {route_reason}",
               f"Summary: {summary}",
-              f"Time: {timestamp}",
+              f"Time: {timestamp_eastern}",
+              f"Time UTC: {timestamp}",
               "",
               "Routing:",
               json.dumps(routing, indent=2, sort_keys=True),
@@ -105,6 +120,18 @@ jobs:
           import os
           from datetime import datetime, timezone
           from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          EASTERN_TZ = ZoneInfo("America/New_York")
+
+          def eastern_timestamp(value):
+              if not value:
+                  return ""
+              try:
+                  parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+              except ValueError:
+                  return value
+              return parsed.astimezone(EASTERN_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
 
           payload = json.loads(os.environ.get("PAYLOAD") or "{}")
           ts = datetime.now(timezone.utc)
@@ -130,6 +157,7 @@ jobs:
               f"- target_agent: {payload.get('target_agent','')}",
               f"- routed_service: {routing.get('service','')}",
               f"- route_reason: {payload.get('route_reason','')}",
+              f"- timestamp_eastern: {payload.get('timestamp_eastern') or eastern_timestamp(payload.get('timestamp',''))}",
               f"- timestamp: {payload.get('timestamp','')}",
               "",
               "## Summary",
