@@ -10,6 +10,10 @@ on:
         description: "Optional JSON payload for test runs"
         required: false
         default: "{}"
+      dry_run:
+        description: "Preview formatting without sending email"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -18,6 +22,7 @@ jobs:
   notify:
     runs-on: [self-hosted]
     steps:
+      - uses: actions/checkout@v4
       - name: Build and send triaged alert email
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -28,77 +33,16 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
           PAYLOAD: ${{ toJson(github.event.client_payload) }}
           PAYLOAD_INPUT: ${{ github.event.inputs.payload_json }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          ALERT_STAGE: triaged
+          TRIAGED_NODE_EMAIL_ENABLED: ${{ vars.TRIAGED_NODE_EMAIL_ENABLED || 'false' }}
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import smtplib
-          from datetime import datetime
-          from email.message import EmailMessage
-          from zoneinfo import ZoneInfo
-
-          EASTERN_TZ = ZoneInfo("America/New_York")
-
-          def eastern_timestamp(value):
-              if not value:
-                  return ""
-              try:
-                  parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-              except ValueError:
-                  return value
-              return parsed.astimezone(EASTERN_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
-
-          payload = os.environ.get("PAYLOAD")
-          if not payload or payload == "null":
-              payload = os.environ.get("PAYLOAD_INPUT") or "{}"
-          data = json.loads(payload)
-
-          cluster = data.get("cluster", "")
-          event = data.get("event", "")
-          status = data.get("status", "")
-          resource_type = data.get("resource_type", "")
-          target_agent = data.get("target_agent", "")
-          route_reason = data.get("route_reason", "")
-          summary = data.get("summary", "")
-          timestamp = data.get("timestamp", "")
-          timestamp_eastern = data.get("timestamp_eastern") or eastern_timestamp(timestamp)
-          routing = data.get("routing", {})
-
-          subject = f"[TRIAGED] {target_agent} {cluster} {status}".strip()
-          body = "\n".join([
-              "Event Type: triaged-agent-alert",
-              f"Cluster: {cluster}",
-              f"Event: {event}",
-              f"Status: {status}",
-              f"Resource Type: {resource_type}",
-              f"Target Agent: {target_agent}",
-              f"Route Reason: {route_reason}",
-              f"Summary: {summary}",
-              f"Time: {timestamp_eastern}",
-              f"Time UTC: {timestamp}",
-              "",
-              "Routing:",
-              json.dumps(routing, indent=2, sort_keys=True),
-              "",
-              "Payload:",
-              json.dumps(data, indent=2, sort_keys=True),
-          ])
-
-          msg = EmailMessage()
-          msg["Subject"] = subject
-          msg["From"] = os.environ["MAIL_FROM"]
-          msg["To"] = os.environ["MAIL_TO"]
-          msg.set_content(body)
-
-          with smtplib.SMTP_SSL(os.environ["SMTP_HOST"], int(os.environ["SMTP_PORT"])) as smtp:
-              smtp.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
-              smtp.send_message(msg)
-          PY
+          python3 scripts/alert_email.py
 
   support-incident-log:
     runs-on: [self-hosted]
     needs: notify
-    if: ${{ github.event.client_payload.target_agent == 'k3s-support-agent' }}
+    if: ${{ github.event.client_payload.target_agent == 'k3s-support-agent' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     steps:
       - name: Ensure git is available
         run: |

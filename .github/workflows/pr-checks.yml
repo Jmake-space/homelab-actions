@@ -1,0 +1,13 @@
+name: PR Checks
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  alert-tests:
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate email renderer
+        run: python3 -m unittest discover -s tests -v
