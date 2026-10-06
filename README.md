@@ -19,6 +19,7 @@ k3s-alert (watcher dispatch ingress)
 - Emails have matching plain-text and HTML bodies with affected/recovered nodes, remaining outages, Eastern time (EDT/EST), UTC, and the source workflow link. Routing JSON is retained in incident logs instead of the email body.
 - Manual workflow runs default to `dry_run=true`: preview only, with no SMTP, downstream dispatch, or incident commits. Uncheck it only for an intentional live test.
 - Source watcher confirmation thresholds determine transient suppression; do not use email formatting to hide sustained node outages.
+- Runners require system `tzdata` for Eastern timestamps. If it is unavailable, the renderer explicitly displays UTC and a timezone notice so a timezone dependency cannot prevent email delivery.
 
 ## Runner
 - Labels: `self-hosted`, `pi5`, `docker`

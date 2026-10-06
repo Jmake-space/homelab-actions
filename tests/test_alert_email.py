@@ -33,6 +33,13 @@ class AlertEmailTests(unittest.TestCase):
         self.assertIn("Still down: None", plain)
         self.assertIn("#147d40", rich)
 
+    def test_missing_timezone_data_does_not_break_email(self):
+        with patch.object(mail, "ZoneInfo", side_effect=mail.ZoneInfoNotFoundError("America/New_York")):
+            _, plain, rich = mail.render({"timestamp": "2026-10-06T04:45:45Z", "event": "recovery"})
+        self.assertIn("04:45:45 AM UTC", plain)
+        self.assertIn("Eastern timezone data unavailable", plain)
+        self.assertIn("Timezone notice", rich)
+
     def test_empty_and_duplicate_payload_do_not_contact_smtp(self):
         for payload in ("{}", '{"resource_type":"node","status":"node-down"}'):
             with patch.dict(os.environ, {"PAYLOAD": payload, "ALERT_STAGE": "triaged"}, clear=True), patch.object(mail.smtplib, "SMTP_SSL") as smtp:

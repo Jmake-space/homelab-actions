@@ -6,7 +6,7 @@ import os
 import smtplib
 from datetime import datetime, timezone
 from email.message import EmailMessage
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 def details(data):
@@ -53,7 +53,12 @@ def render(data, run_url=""):
             instant = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
             if instant.tzinfo is None:
                 instant = instant.replace(tzinfo=timezone.utc)
-            rows.append(("Time", instant.astimezone(ZoneInfo("America/New_York")).strftime("%b %d, %Y at %I:%M:%S %p %Z")))
+            try:
+                display_zone = ZoneInfo("America/New_York")
+            except ZoneInfoNotFoundError:
+                display_zone = timezone.utc
+                rows.append(("Timezone notice", "Eastern timezone data unavailable on the sender; displaying UTC."))
+            rows.append(("Time", instant.astimezone(display_zone).strftime("%b %d, %Y at %I:%M:%S %p %Z")))
             rows.append(("UTC", instant.astimezone(timezone.utc).isoformat()))
         except ValueError:
             rows.append(("Time", timestamp))
